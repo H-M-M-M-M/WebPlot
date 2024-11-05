@@ -81,33 +81,33 @@ def main():
 
             # Select columns for X and Y axes
             columns = df.columns.tolist()
-            x_col = st.selectbox("选择X轴列（可选）", ["None"] + columns)
-            y_col = st.selectbox("选择Y轴列", columns)
+            x_col = st.selectbox("Select X-Axis (Optional)", ["None"] + columns)
+            y_col = st.selectbox("Select Y-Axis", columns)
 
             # Preprocess data
             df = preprocess_data(df, x_col if x_col != "None" else None, y_col)
 
             # Filter options
-            filter_col = st.selectbox("选择筛选列（可选）", ["None"] + columns)
+            filter_col = st.selectbox("Select Filter Column（Optional）", ["None"] + columns)
             if filter_col != "None":
                 filter_values = df[filter_col].dropna().unique()
-                selected_values = st.multiselect("选择筛选值", filter_values, default=filter_values.tolist())
+                selected_values = st.multiselect("Select Filter Value(s)", filter_values, default=filter_values.tolist())
                 df = df[df[filter_col].isin(selected_values)]
 
             # X and Y axis limits
             if x_col != "None" and pd.api.types.is_datetime64_any_dtype(df[x_col]):
-                x_min = st.date_input("X轴最小值", value=df[x_col].min().to_pydatetime())
-                x_max = st.date_input("X轴最大值", value=df[x_col].max().to_pydatetime())
+                x_min = st.date_input("X-Axis Minimum Value", value=df[x_col].min().to_pydatetime())
+                x_max = st.date_input("X-Axis Maximum Value", value=df[x_col].max().to_pydatetime())
             else:
-                x_min = st.number_input("X轴最小值", value=float(df[x_col].min()) if x_col != "None" and not df[x_col].isnull().all() else None, help="设置X轴最小值")
-                x_max = st.number_input("X轴最大值", value=float(df[x_col].max()) if x_col != "None" and not df[x_col].isnull().all() else None, help="设置X轴最大值")
+                x_min = st.number_input("X-Axis Minimum Value", value=float(df[x_col].min()) if x_col != "None" and not df[x_col].isnull().all() else None, help="set X-Axis Minimum Value")
+                x_max = st.number_input("X-Axis Maximum Value", value=float(df[x_col].max()) if x_col != "None" and not df[x_col].isnull().all() else None, help="set X-Axis Maximum Value")
             
-            y_min = st.number_input("Y轴最小值", value=float(df[y_col].min()) if not df[y_col].isnull().all() else None, help="设置Y轴最小值")
-            y_max = st.number_input("Y轴最大值", value=float(df[y_col].max()) if not df[y_col].isnull().all() else None, help="设置Y轴最大值")
+            y_min = st.number_input("Y-Axis Minimum Value", value=float(df[y_col].min()) if not df[y_col].isnull().all() else None, help="set Y-Axis Minimum Value")
+            y_max = st.number_input("Y-Axis Maximum Value", value=float(df[y_col].max()) if not df[y_col].isnull().all() else None, help="set Y-Axis Maximum Value")
 
             # Input lines to draw
-            y_upper_limit = st.number_input("Y轴上限（Upper Limit）", value=None, help="设置Y轴的上规格限")
-            y_lower_limit = st.number_input("Y轴下限（Lower Limit）", value=None, help="设置Y轴的下规格限")
+            y_upper_limit = st.number_input("Y-Axis（Upper Limit）", value=None, help="set Upper limit for Y-Axis")
+            y_lower_limit = st.number_input("Y-Axis（Lower Limit）", value=None, help="set Lower limit for Y-Axis")
 
             # Calculate statistics
             sample_size = df[y_col].dropna().count()

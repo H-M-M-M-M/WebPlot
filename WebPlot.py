@@ -132,7 +132,7 @@ def main():
         except Exception as e:
             st.error(f"处理文件时出错: {e}")
     else:
-        st.info("请上传一个Excel文件以继续")
+        st.info("please upload Excel file to continue")
 
 if __name__ == "__main__":
     main()

@@ -71,12 +71,12 @@ def main():
     st.title('Scatter Plot Drawing Application')
 
     # File upload with better error handling
-    uploaded_file = st.file_uploader("选择一个Excel文件", type="xlsx")
+    uploaded_file = st.file_uploader("Upload Excel File", type="xlsx")
     if uploaded_file:
         try:
             xlsx = pd.ExcelFile(uploaded_file)
             sheet_names = xlsx.sheet_names
-            sheet = st.selectbox("选择工作表", sheet_names)
+            sheet = st.selectbox("Select sheet", sheet_names)
             df = pd.read_excel(uploaded_file, sheet_name=sheet)
 
             # Select columns for X and Y axes

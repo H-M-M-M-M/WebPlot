@@ -68,7 +68,7 @@ def create_scatter_plot(df, x_col, y_col, title, subtitle, x_min, x_max, y_min, 
 
 # Streamlit app
 def main():
-    st.title('散点图绘制应用')
+    st.title('Scatter Plot Drawing Application')
 
     # File upload with better error handling
     uploaded_file = st.file_uploader("选择一个Excel文件", type="xlsx")

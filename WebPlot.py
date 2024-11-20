@@ -1,138 +1,104 @@
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
-# Function to preprocess data
-def preprocess_data(df, x_col, y_col):
-    if x_col:
-        if 'Date' in x_col:
-            df[x_col] = pd.to_datetime(df[x_col], errors='coerce')  # Convert to datetime
-        else:
-            df[x_col] = df[x_col].astype(str).replace('[^-?\d.]', '', regex=True)  # Retain negative sign and numeric characters
-            df[x_col] = pd.to_numeric(df[x_col], errors='coerce')  # Convert to numeric, forcing errors to NaN
-    
-    df[y_col] = df[y_col].astype(str).replace('[^-?\d.]', '', regex=True)  # Retain negative sign and numeric characters
-    df[y_col] = pd.to_numeric(df[y_col], errors='coerce')  # Convert to numeric, forcing errors to NaN
+# 设置标题
+st.title("Retest TrackMetrics")
 
-    return df
+# 上传文件
+uploaded_file = st.file_uploader("选择一个Excel文件", type=["xlsx"])
 
-# Function to calculate CPK
-def calculate_cpk(mean, std, upper_limit, lower_limit):
-    if upper_limit is not None and lower_limit is not None:
-        if upper_limit > mean and lower_limit < mean:
-            return min((upper_limit - mean) / (3 * std), (mean - lower_limit) / (3 * std))
-    return None
+if uploaded_file:
+    # 读取文件
+    data = pd.read_excel(uploaded_file)
 
-# Function to create scatter plot
-def create_scatter_plot(df, x_col, y_col, title, subtitle, x_min, x_max, y_min, y_max, y_upper_limit, y_lower_limit):
-    if x_col == "None":
-        fig = px.scatter(df, y=y_col, title=title, color_discrete_sequence=['blue'])
+    # 显示数据预览
+    st.write("上传的测试数据：")
+    st.dataframe(data.head())
+
+    # 获取列名供用户选择
+    columns = ["未选择"] + data.columns.tolist()  # 添加“未选择”作为默认选项
+    sn_column = st.selectbox("选择SN列", columns, index=0)
+    date_column = st.selectbox("选择Date列", columns, index=0)
+    time_column = st.selectbox("选择Time列", columns, index=0)
+    result_column = st.selectbox("选择测试结果列", columns, index=0)
+    product_column = st.selectbox("选择产品型号列（可为空）", ["无（不分型号）"] + data.columns.tolist(), index=0)
+
+    # 检查是否有未选择的必填选项
+    if "未选择" in [sn_column, date_column, time_column, result_column]:
+        st.warning("请确保所有必选列已选择！")
+        st.stop()
+
+    # 确保日期和时间列合并正确
+    try:
+        data['测试时间'] = pd.to_datetime(
+            data[date_column].astype(str) + ' ' + data[time_column].astype(str), errors='coerce'
+        )
+        if data['测试时间'].isna().any():
+            st.error("部分日期或时间无效，请检查数据格式！")
+            st.stop()
+        data['测试日期'] = data['测试时间'].dt.date
+    except Exception as e:
+        st.error(f"日期或时间列解析失败: {e}")
+        st.stop()
+
+    # 按SN和测试时间排序
+    data = data.sort_values(by=[sn_column, '测试时间']).reset_index(drop=True)
+
+    # 获取每个SN的最新测试结果
+    latest_data = data.drop_duplicates(subset=[sn_column], keep='last')
+
+    # 标记最终结果
+    fail_sns = latest_data[latest_data[result_column].str.lower() == 'fail'][sn_column].values
+    data['最终结果'] = data[sn_column].apply(lambda x: 'fail' if x in fail_sns else 'pass')
+
+    # 计算每个SN的首次测试日期
+    data['按日期统计'] = data.groupby(sn_column)['测试日期'].transform('min')
+
+    # 按产品型号和按日期统计统计
+    def format_test_details(sn_group):
+        """格式化SN的测试详情"""
+        test_details = []
+        for i, (_, row) in enumerate(sn_group.iterrows(), 1):
+            result = row[result_column].lower()
+            test_details.append(f"@{row['测试时间'].strftime('%Y/%m/%d %H:%M:%S')} {i}st test {result}")
+        return test_details
+
+    def calculate_stats(group):
+        """统计数据并格式化retest_sn和fail_sn"""
+        total_tests = len(group)
+        retests = group.duplicated(subset=[sn_column]).sum()
+        fails = group[group['最终结果'] == 'fail'].shape[0]
+        unique_sn_count = group[sn_column].nunique()
+
+        # 获取复测SN及其详情
+        retest_details = []
+        retest_group = group[group.duplicated(subset=[sn_column], keep=False)]
+        for sn, sn_group in retest_group.groupby(sn_column):
+            test_details = format_test_details(sn_group)
+            retest_details.append(f"{sn} test {len(test_details)} times\n" + "\n".join(test_details))
+
+        # 获取失败SN及其详情
+        fail_details = []
+        fail_group = group[group['最终结果'] == 'fail']
+        for sn, sn_group in fail_group.groupby(sn_column):
+            test_details = format_test_details(sn_group)
+            fail_details.append(f"{sn} test {len(test_details)} times\n" + "\n".join(test_details))
+
+        return pd.Series({
+            '测试总数': total_tests,
+            '唯一SN计数': unique_sn_count,
+            'Retest Pass SN 计数': retests,
+            'Fail SN 计数': fails,
+            'Retest Pass SN Details': "\n".join(retest_details),
+            'Fail SN Details': "\n".join(fail_details)
+        })
+
+    # 判断是否按产品型号分组
+    if product_column == "无（不分型号）":
+        stats = data.groupby(['按日期统计']).apply(calculate_stats).reset_index()
     else:
-        fig = px.scatter(df, x=x_col, y=y_col, title=title, color_discrete_sequence=['blue'])
+        stats = data.groupby([product_column, '按日期统计']).apply(calculate_stats).reset_index()
 
-    fig.update_traces(marker=dict(size=8), selector=dict(mode='markers'))
-    fig.update_layout(
-        title={
-            'text': title,
-            'x': 0.5,  # Center the title
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
-        xaxis_title=x_col if x_col != 'None' else None,
-        yaxis_title=y_col,
-        xaxis=dict(range=[x_min, x_max] if x_col != "None" and (x_min is not None or x_max is not None) else None),
-        yaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None),
-        annotations=[
-            dict(
-                x=0.5,
-                y=-0.2,  # Adjusted to avoid overlap with the plot
-                xref='paper',
-                yref='paper',
-                text=subtitle,
-                showarrow=False,
-                font=dict(size=10, color="gray"),  # Reduced font size for the subtitle
-                xanchor='center',
-                yanchor='top'
-            )
-        ]
-    )
-    
-    # Draw horizontal lines if limits are provided
-    if y_upper_limit is not None:
-        fig.add_hline(y=y_upper_limit, line=dict(color="red", dash="dash"), annotation_text=f'Upper Limit = {y_upper_limit}')
-
-    if y_lower_limit is not None:
-        fig.add_hline(y=y_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'Lower Limit = {y_lower_limit}')
-
-    return fig
-
-# Streamlit app
-def main():
-    st.title('Scatter Plot Drawing Application')
-
-    # File upload with better error handling
-    uploaded_file = st.file_uploader("Upload Excel File", type="xlsx")
-    if uploaded_file:
-        try:
-            xlsx = pd.ExcelFile(uploaded_file)
-            sheet_names = xlsx.sheet_names
-            sheet = st.selectbox("Select sheet", sheet_names)
-            df = pd.read_excel(uploaded_file, sheet_name=sheet)
-
-            # Select columns for X and Y axes
-            columns = df.columns.tolist()
-            x_col = st.selectbox("Select X-Axis (Optional)", ["None"] + columns)
-            y_col = st.selectbox("Select Y-Axis", columns)
-
-            # Preprocess data
-            df = preprocess_data(df, x_col if x_col != "None" else None, y_col)
-
-            # Filter options
-            filter_col = st.selectbox("Select Filter Column（Optional）", ["None"] + columns)
-            if filter_col != "None":
-                filter_values = df[filter_col].dropna().unique()
-                selected_values = st.multiselect("Select Filter Value(s)", filter_values, default=filter_values.tolist())
-                df = df[df[filter_col].isin(selected_values)]
-
-            # X and Y axis limits
-            if x_col != "None" and pd.api.types.is_datetime64_any_dtype(df[x_col]):
-                x_min = st.date_input("X-Axis Minimum Value", value=df[x_col].min().to_pydatetime())
-                x_max = st.date_input("X-Axis Maximum Value", value=df[x_col].max().to_pydatetime())
-            else:
-                x_min = st.number_input("X-Axis Minimum Value", value=float(df[x_col].min()) if x_col != "None" and not df[x_col].isnull().all() else None, help="set X-Axis Minimum Value")
-                x_max = st.number_input("X-Axis Maximum Value", value=float(df[x_col].max()) if x_col != "None" and not df[x_col].isnull().all() else None, help="set X-Axis Maximum Value")
-            
-            y_min = st.number_input("Y-Axis Minimum Value", value=float(df[y_col].min()) if not df[y_col].isnull().all() else None, help="set Y-Axis Minimum Value")
-            y_max = st.number_input("Y-Axis Maximum Value", value=float(df[y_col].max()) if not df[y_col].isnull().all() else None, help="set Y-Axis Maximum Value")
-
-            # Input lines to draw
-            y_upper_limit = st.number_input("Y-Axis（Upper Limit）", value=None, help="set Upper limit for Y-Axis")
-            y_lower_limit = st.number_input("Y-Axis（Lower Limit）", value=None, help="set Lower limit for Y-Axis")
-
-            # Calculate statistics
-            sample_size = df[y_col].dropna().count()
-            mean_value = df[y_col].mean()
-            std_value = df[y_col].std()
-
-            # Calculate CPK
-            cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
-
-            # Generate custom title and subtitle
-            title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
-            subtitle = f"Sample Size: {sample_size}, Mean: {mean_value:.2f}, Std: {std_value:.2f}"
-            if cpk is not None:
-                subtitle += f", CPK: {cpk:.2f}"
-
-            # Create scatter plot
-            fig = create_scatter_plot(df, x_col, y_col, title, subtitle, x_min, x_max, y_min, y_max, y_upper_limit, y_lower_limit)
-
-            # Show plot
-            st.plotly_chart(fig)
-
-        except Exception as e:
-            st.error(f"处理文件时出错: {e}")
-    else:
-        st.info("please upload Excel file to continue")
-
-if __name__ == "__main__":
-    main()
+    # 显示统计结果
+    st.write("统计结果：")
+    st.dataframe(stats)

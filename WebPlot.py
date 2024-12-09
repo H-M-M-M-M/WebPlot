@@ -71,7 +71,7 @@ def main():
     st.title('Scatter Plot Drawing Application')
 
     # File upload with better error handling
-    uploaded_file = st.file_uploader("Upload Excel File", type="xlsx")
+    uploaded_file = st.file_uploader("Upload a File", type=["xlsx", "xls", "csv"])
     if uploaded_file:
         try:
             xlsx = pd.ExcelFile(uploaded_file)

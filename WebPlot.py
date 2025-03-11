@@ -53,7 +53,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_u
 
 # Streamlit app
 def main():
-    st.title('📊 Scatter Plot Visualization Tool')
+    st.title('📊 Scatter Plot Visualization Tool 散点图看趋势的啦，也有分类看的功能哦ヾ(≧▽≦*)o')
 
     uploaded_file = st.file_uploader("📂 Upload a File", type=["xlsx", "xls", "csv"])
     if uploaded_file:

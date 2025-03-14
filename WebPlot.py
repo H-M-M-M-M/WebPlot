@@ -1,6 +1,9 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+import numpy as np
+from scipy.stats import norm
 
 # Function to preprocess data
 def preprocess_data(df, x_col, y_col):
@@ -51,9 +54,63 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_u
 
     return fig
 
+# Function to create histogram based on Y-axis data and filter color grouping
+def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col):
+    # Histogram plot
+    if filter_col != "None":
+        fig = px.histogram(df, x=y_col, color=filter_col, nbins=20, histnorm='probability', opacity=0.75)
+    else:
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=df[y_col],
+            nbinsx=20,  # You can adjust the number of bins here
+            histnorm='probability',
+            name=f'{y_col} Distribution',
+            opacity=0.75
+        ))
+
+    # Only apply Y-axis limits if they are set (not None)
+    if y_min is not None and y_max is not None:
+        fig.update_layout(
+            title=f'{y_col} Histogram',
+            xaxis_title=y_col,
+            yaxis_title='Probability Density',
+            bargap=0.2,
+            xaxis=dict(range=[y_min, y_max])  # Matching the Y-axis range of scatter plot
+        )
+        
+        # Add limit lines if defined
+        if y_upper_limit is not None:
+            fig.add_vline(x=y_upper_limit, line=dict(color="red", dash="dash"), annotation_text=f'Upper Limit = {y_upper_limit}')
+        if y_lower_limit is not None:
+            fig.add_vline(x=y_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'Lower Limit = {y_lower_limit}')
+
+    # Fit a normal distribution to the data and add a fit line for each filter group
+    if filter_col != "None":
+        groups = df[filter_col].dropna().unique()
+        for group in groups:
+            group_data = df[df[filter_col] == group]
+            mu, std = norm.fit(group_data[y_col].dropna())
+            xmin, xmax = group_data[y_col].min(), group_data[y_col].max()
+            x = np.linspace(xmin, xmax, 100)
+            p = norm.pdf(x, mu, std)
+            fig.add_trace(go.Scatter(
+                x=x, y=p, mode='lines', name=f'{group} Fit Line', line=dict(width=2)
+            ))
+    else:
+        mu, std = norm.fit(df[y_col].dropna())
+        xmin, xmax = df[y_col].min(), df[y_col].max()
+        x = np.linspace(xmin, xmax, 100)
+        p = norm.pdf(x, mu, std)
+        fig.add_trace(go.Scatter(
+            x=x, y=p, mode='lines', name='Fit Line', line=dict(color='orange', width=2)
+        ))
+
+    return fig
+
 # Streamlit app
 def main():
-    st.title('📊 Scatter Plot Visualization Tool 散点图看趋势的啦，也有分类看的功能哦ヾ(≧▽≦*)o')
+    st.title('📊 Scatter Plot and Histogram Visualization Tool')
 
     uploaded_file = st.file_uploader("📂 Upload a File", type=["xlsx", "xls", "csv"])
     if uploaded_file:
@@ -96,25 +153,43 @@ def main():
                 y_upper_limit = st.number_input("🚀 Y Upper Limit", value=None)
                 y_lower_limit = st.number_input("📏 Y Lower Limit", value=None)
 
-            # Generate plot
+            # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
             fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col)
             st.plotly_chart(fig)
             
-            # Compute statistics
-            sample_size = df[y_col].dropna().count()
-            mean_value = df[y_col].mean()
-            std_value = df[y_col].std()
-            cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
+            # User option to display histogram
+            show_histogram = st.checkbox("Show Histogram", value=False)
 
-            # Display statistics
-            st.subheader("📊 Data Statistics")
-            stats_data = {
-                "Metric": ["Sample Size", "Mean", "Std Dev", "CPK"],
-                "Value": [sample_size, f"{mean_value:.2f}", f"{std_value:.2f}", f"{cpk:.2f}" if cpk is not None else "N/A"]
-            }
-            st.table(pd.DataFrame(stats_data))
-            
+            if show_histogram:
+                # Generate histogram for Y-axis data with color grouping (if filter column is selected)
+                hist_fig = create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col)
+                st.plotly_chart(hist_fig)
+
+            # Compute statistics for each group if filter_col is selected
+            stats_data = []
+            if filter_col != "None":
+                for group in df[filter_col].dropna().unique():
+                    group_data = df[df[filter_col] == group]
+                    sample_size = group_data[y_col].dropna().count()
+                    mean_value = group_data[y_col].mean()
+                    std_value = group_data[y_col].std()
+                    cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
+                    stats_data.append([group, sample_size, f"{mean_value:.2f}", f"{std_value:.2f}", f"{cpk:.2f}" if cpk is not None else "N/A"])
+
+            # Overall statistics
+            overall_sample_size = df[y_col].dropna().count()
+            overall_mean = df[y_col].mean()
+            overall_std = df[y_col].std()
+            overall_cpk = calculate_cpk(overall_mean, overall_std, y_upper_limit, y_lower_limit)
+
+            # Add overall stats to the table
+            stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.2f}", f"{overall_std:.2f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
+
+            stats_df = pd.DataFrame(stats_data, columns=["Group", "Sample Size", "Mean", "Std Dev", "CPK"])
+            st.subheader("📊 Statistics by Group")
+            st.table(stats_df)
+
         except Exception as e:
             st.error(f"🚨 Error processing file: {e}")
     else:

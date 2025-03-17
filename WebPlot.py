@@ -117,7 +117,7 @@ def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filt
 
 # Streamlit app
 def main():
-    st.title('🗺🌏Scatter Plot and Histogram Visualization Tool - 可以看散点图，直方图，计算cpk等')
+    st.title('📊 Scatter Plot and Histogram Visualization Tool')
 
     uploaded_file = st.file_uploader("📂 Upload a File", type=["xlsx", "xls", "csv"])
     if uploaded_file:
@@ -154,13 +154,13 @@ def main():
                 else:
                     x_min = st.number_input("📈 X-Axis Min", value=float(df[x_col].min()) if x_col != "None" and pd.notna(df[x_col].min()) else None)
                     x_max = st.number_input("📉 X-Axis Max", value=float(df[x_col].max()) if x_col != "None" and pd.notna(df[x_col].max()) else None)
-                    x_upper_limit = st.number_input("🚀 X Upper Limit - X轴上限", value=None)
-                    x_lower_limit = st.number_input("📏 X Lower Limit - X轴下限", value=None)
+                    x_upper_limit = st.number_input("🚀 X Upper Limit", value=None)
+                    x_lower_limit = st.number_input("📏 X Lower Limit", value=None)
             with col2:
                 y_min = st.number_input("📈 Y-Axis Min", value=float(df[y_col].min()) if not df[y_col].isnull().all() else None)
                 y_max = st.number_input("📉 Y-Axis Max", value=float(df[y_col].max()) if not df[y_col].isnull().all() else None)
-                y_upper_limit = st.number_input("🚀 Y Upper Limit - Y轴上限", value=None)
-                y_lower_limit = st.number_input("📏 Y Lower Limit - Y轴下限", value=None)
+                y_upper_limit = st.number_input("🚀 Y Upper Limit", value=None)
+                y_lower_limit = st.number_input("📏 Y Lower Limit", value=None)
 
             # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
@@ -168,7 +168,7 @@ def main():
             st.plotly_chart(fig)
 
             # User option to display histogram
-            show_histogram = st.checkbox("Show Histogram - 你要看直方图吗", value=False)
+            show_histogram = st.checkbox("Show Histogram", value=True)
 
             if show_histogram:
                 # Generate histogram for Y-axis data with color grouping (if filter column is selected)
@@ -195,9 +195,16 @@ def main():
             # Add overall stats to the table
             stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.2f}", f"{overall_std:.2f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
 
+            # 创建 DataFrame，并去除空行
             stats_df = pd.DataFrame(stats_data, columns=["Group", "Sample Size", "Mean", "Std Dev", "CPK"])
-            st.subheader("📊 Statistics by Group -数据统计")
-            st.table(stats_df)
+            stats_df = stats_df.dropna(how="all").reset_index(drop=True)  # 移除完全为空的行
+
+            # Streamlit 显示交互式表格
+            st.subheader("📊 Statistics by Group")
+            if not stats_df.empty:
+                st.dataframe(stats_df, use_container_width=True)  # 交互式表格
+            else:
+                st.write("No statistics available for the selected filters.")
 
         except Exception as e:
             st.error(f"🚨 Error processing file: {e}")

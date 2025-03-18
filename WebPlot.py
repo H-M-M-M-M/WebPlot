@@ -168,7 +168,7 @@ def main():
             st.plotly_chart(fig)
 
             # User option to display histogram
-            show_histogram = st.checkbox("Show Histogram", value=True)
+            show_histogram = st.checkbox("Show Histogram", value=False)
 
             if show_histogram:
                 # Generate histogram for Y-axis data with color grouping (if filter column is selected)

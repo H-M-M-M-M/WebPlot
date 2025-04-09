@@ -1,4 +1,3 @@
-import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -6,10 +5,12 @@ import numpy as np
 from scipy.stats import norm
 
 # Function to preprocess data
-def preprocess_data(df, x_col, y_col, filter_col):
-    # Ensure filter column is treated as text
-    if filter_col != "None":
-        df[filter_col] = df[filter_col].astype(str)
+def preprocess_data(df, x_col, y_col, filter_col_1, filter_col_2):
+    # Ensure filter columns are treated as text
+    if filter_col_1 != "None":
+        df[filter_col_1] = df[filter_col_1].astype(str)
+    if filter_col_2 != "None":
+        df[filter_col_2] = df[filter_col_2].astype(str)
 
     # Process x_col and y_col
     if x_col and x_col != "None":
@@ -62,10 +63,14 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_u
     return fig
 
 # Function to create histogram based on Y-axis data and filter color grouping
-def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col):
+def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2):
     # Histogram plot
-    if filter_col != "None":
-        fig = px.histogram(df, x=y_col, color=filter_col, nbins=20, histnorm='probability', opacity=0.75)
+    if filter_col_1 != "None" and filter_col_2 != "None":
+        fig = px.histogram(df, x=y_col, color=[df[filter_col_1], df[filter_col_2]], nbins=20, histnorm='probability', opacity=0.75)
+    elif filter_col_1 != "None":
+        fig = px.histogram(df, x=y_col, color=filter_col_1, nbins=20, histnorm='probability', opacity=0.75)
+    elif filter_col_2 != "None":
+        fig = px.histogram(df, x=y_col, color=filter_col_2, nbins=20, histnorm='probability', opacity=0.75)
     else:
         fig = go.Figure()
         fig.add_trace(go.Histogram(
@@ -93,10 +98,13 @@ def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filt
             fig.add_vline(x=y_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'Lower Limit = {y_lower_limit}')
 
     # Fit a normal distribution to the data and add a fit line for each filter group
-    if filter_col != "None":
-        groups = df[filter_col].dropna().unique()
+    if filter_col_1 != "None" or filter_col_2 != "None":
+        if filter_col_1 != "None":
+            groups = df[filter_col_1].dropna().unique()
+        elif filter_col_2 != "None":
+            groups = df[filter_col_2].dropna().unique()
         for group in groups:
-            group_data = df[df[filter_col] == group]
+            group_data = df[df[filter_col_1] == group] if filter_col_1 != "None" else df[df[filter_col_2] == group]
             mu, std = norm.fit(group_data[y_col].dropna())
             xmin, xmax = group_data[y_col].min(), group_data[y_col].max()
             x = np.linspace(xmin, xmax, 100)
@@ -133,16 +141,21 @@ def main():
             with col2:
                 y_col = st.selectbox("📍 Select Y-Axis", columns)
 
-            filter_col = st.selectbox("🎨 Select Filter Column (for color grouping)", ["None"] + columns)
+            filter_col_1 = st.selectbox("🎨 Select Filter Column 1 (for color grouping)", ["None"] + columns)
+            filter_col_2 = st.selectbox("🎨 Select Filter Column 2 (for color grouping)", ["None"] + columns)
 
-            # Preprocess data and ensure filter column is treated as text
-            df = preprocess_data(df, x_col if x_col != "None" else None, y_col, filter_col)
+            # Preprocess data and ensure filter columns are treated as text
+            df = preprocess_data(df, x_col if x_col != "None" else None, y_col, filter_col_1, filter_col_2)
 
-            # Filter options
-            selected_values = []
-            if filter_col != "None":
-                selected_values = st.multiselect("🎯 Select Filter Value(s)", df[filter_col].dropna().unique())
-                df = df[df[filter_col].isin(selected_values)]
+            # Filter options for both filter columns
+            selected_values_1 = []
+            selected_values_2 = []
+            if filter_col_1 != "None":
+                selected_values_1 = st.multiselect("🎯 Select Filter Value(s) for Filter Column 1", df[filter_col_1].dropna().unique())
+                df = df[df[filter_col_1].isin(selected_values_1)]
+            if filter_col_2 != "None":
+                selected_values_2 = st.multiselect("🎯 Select Filter Value(s) for Filter Column 2", df[filter_col_2].dropna().unique())
+                df = df[df[filter_col_2].isin(selected_values_2)]
 
             # X/Y axis limits
             col1, col2 = st.columns(2)
@@ -164,22 +177,23 @@ def main():
 
             # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
-            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col)
+            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col_1)
             st.plotly_chart(fig)
 
             # User option to display histogram
             show_histogram = st.checkbox("Show Histogram", value=False)
 
             if show_histogram:
-                # Generate histogram for Y-axis data with color grouping (if filter column is selected)
-                hist_fig = create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col)
+                # Generate histogram for Y-axis data with color grouping (if filter columns are selected)
+                hist_fig = create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2)
                 st.plotly_chart(hist_fig)
 
-            # Compute statistics for each group if filter_col is selected
+            # Compute statistics for each group if filter columns are selected
             stats_data = []
-            if filter_col != "None":
-                for group in df[filter_col].dropna().unique():
-                    group_data = df[df[filter_col] == group]
+            if filter_col_1 != "None" or filter_col_2 != "None":
+                group_filter = filter_col_1 if filter_col_1 != "None" else filter_col_2
+                for group in df[group_filter].dropna().unique():
+                    group_data = df[df[group_filter] == group]
                     sample_size = group_data[y_col].dropna().count()
                     mean_value = group_data[y_col].mean()
                     std_value = group_data[y_col].std()

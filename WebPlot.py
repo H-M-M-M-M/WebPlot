@@ -134,15 +134,22 @@ def main():
                 y_col = st.selectbox("📍 Select Y-Axis", columns)
 
             filter_col = st.selectbox("🎨 Select Filter Column (for color grouping)", ["None"] + columns)
+            filter2_col = st.selectbox("🎨 Select Second Filter Column (for secondary grouping)", ["None"] + columns)
 
             # Preprocess data and ensure filter column is treated as text
             df = preprocess_data(df, x_col if x_col != "None" else None, y_col, filter_col)
 
-            # Filter options
+            # Filter options for the first filter column
             selected_values = []
             if filter_col != "None":
                 selected_values = st.multiselect("🎯 Select Filter Value(s)", df[filter_col].dropna().unique())
                 df = df[df[filter_col].isin(selected_values)]
+
+            # Filter options for the second filter column
+            selected_values2 = []
+            if filter2_col != "None":
+                selected_values2 = st.multiselect("🎯 Select Second Filter Value(s)", df[filter2_col].dropna().unique())
+                df = df[df[filter2_col].isin(selected_values2)]
 
             # X/Y axis limits
             col1, col2 = st.columns(2)
@@ -164,7 +171,21 @@ def main():
 
             # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
-            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col)
+            
+            # Create a combined filter label (for legend)
+            if filter_col != "None" and filter2_col != "None":
+                df['Combined_Filter'] = df[filter_col].astype(str) + " - " + df[filter2_col].astype(str)
+                filter_label = 'Combined_Filter'
+            elif filter_col != "None":
+                df['Combined_Filter'] = df[filter_col].astype(str)
+                filter_label = 'Combined_Filter'
+            elif filter2_col != "None":
+                df['Combined_Filter'] = df[filter2_col].astype(str)
+                filter_label = 'Combined_Filter'
+            else:
+                filter_label = None
+
+            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_label)
             st.plotly_chart(fig)
 
             # User option to display histogram
@@ -172,14 +193,14 @@ def main():
 
             if show_histogram:
                 # Generate histogram for Y-axis data with color grouping (if filter column is selected)
-                hist_fig = create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col)
+                hist_fig = create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_label)
                 st.plotly_chart(hist_fig)
 
             # Compute statistics for each group if filter_col is selected
             stats_data = []
-            if filter_col != "None":
-                for group in df[filter_col].dropna().unique():
-                    group_data = df[df[filter_col] == group]
+            if filter_label:
+                for group in df[filter_label].dropna().unique():
+                    group_data = df[df[filter_label] == group]
                     sample_size = group_data[y_col].dropna().count()
                     mean_value = group_data[y_col].mean()
                     std_value = group_data[y_col].std()

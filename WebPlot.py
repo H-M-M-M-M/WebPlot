@@ -211,9 +211,9 @@ def main():
             stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.2f}", f"{overall_std:.2f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
 
             # Display statistics
-            st.markdown("### 📊 Selected Data Statistics")
-            stats_df = pd.DataFrame(stats_data, columns=[group_filter if filter_col_1 != "None" or filter_col_2 != "None" else "Group", "Sample Size", "Mean", "Std Dev", "CPK"])
-            st.dataframe(stats_df)
+            #st.markdown("### 📊 Selected Data Statistics")
+            #stats_df = pd.DataFrame(stats_data, columns=[group_filter if filter_col_1 != "None" or filter_col_2 != "None" else "Group", "Sample Size", "Mean", "Std Dev", "CPK"])
+            #st.dataframe(stats_df)
 
             # 创建 DataFrame，并去除空行
             stats_df = pd.DataFrame(stats_data, columns=["Group", "Sample Size", "Mean", "Std Dev", "CPK"])

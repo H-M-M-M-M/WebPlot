@@ -199,7 +199,7 @@ def main():
                     mean_value = group_data[y_col].mean()
                     std_value = group_data[y_col].std()
                     cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
-                    stats_data.append([group, sample_size, f"{mean_value:.2f}", f"{std_value:.2f}", f"{cpk:.2f}" if cpk is not None else "N/A"])
+                    stats_data.append([group, sample_size, f"{mean_value:.4f}", f"{std_value:.4f}", f"{cpk:.2f}" if cpk is not None else "N/A"])
 
             # Overall statistics
             overall_sample_size = df[y_col].dropna().count()
@@ -208,7 +208,7 @@ def main():
             overall_cpk = calculate_cpk(overall_mean, overall_std, y_upper_limit, y_lower_limit)
 
             # Add overall stats to the table
-            stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.2f}", f"{overall_std:.2f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
+            stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.4f}", f"{overall_std:.4f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
 
             # Display statistics
             #st.markdown("### 📊 Selected Data Statistics")

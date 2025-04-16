@@ -3,6 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import numpy as np
+import scipy.stats as stats
 from scipy.stats import norm
 
 # Function to preprocess data
@@ -33,94 +34,105 @@ def calculate_cpk(mean, std, upper_limit, lower_limit):
     return None
 
 # Function to create scatter plot
-def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, color_col):
-    hover_data = [df.columns[0], df.columns[1]]  # Display the first two columns in the hover data
+def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
+                        x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit,
+                        filter_col_1, filter_col_2):
 
-    if color_col == "None":
-        fig = px.scatter(df, x=x_col if x_col != "None" else None, y=y_col, title=title, color_discrete_sequence=['blue'], hover_data=hover_data)
+    # 创建组合颜色列（如有）
+    if filter_col_1 != "None" and filter_col_2 != "None":
+        df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
+        color_col = "__ColorGroup__"
+    elif filter_col_1 != "None":
+        color_col = filter_col_1
+    elif filter_col_2 != "None":
+        color_col = filter_col_2
     else:
-        fig = px.scatter(df, x=x_col if x_col != "None" else None, y=y_col, color=df[color_col], title=title, color_discrete_sequence=px.colors.qualitative.Set1, hover_data=hover_data)
+        color_col = None
 
-    fig.update_traces(marker=dict(size=8))
-    fig.update_layout(
-        title={'text': title, 'x': 0.5, 'xanchor': 'center'},
-        xaxis=dict(range=[x_min, x_max] if x_min is not None and x_max is not None else None),
-        yaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None),
-        legend_title=color_col if color_col != "None" else None
+    fig = px.scatter(
+        df,
+        x=x_col if x_col != "None" else df.index,
+        y=y_col,
+        color=color_col,
+        title=title,
+        height=500
     )
 
-    # Add limit lines
+    fig.update_layout(title=title, xaxis_title=x_col, yaxis_title=y_col)
+    fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))
+
+    fig.update_layout(
+        xaxis=dict(range=[x_min, x_max] if x_min is not None and x_max is not None else None),
+        yaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None)
+    )
+
+    if x_upper_limit is not None:
+        fig.add_vline(x=x_upper_limit, line=dict(color='red', dash='dash'), annotation_text="X Upper", annotation_position="top right")
+    if x_lower_limit is not None:
+        fig.add_vline(x=x_lower_limit, line=dict(color='green', dash='dash'), annotation_text="X Lower", annotation_position="bottom right")
     if y_upper_limit is not None:
-        fig.add_hline(y=y_upper_limit, line=dict(color="red", dash="dash"), annotation_text=f'Upper Limit = {y_upper_limit}')
+        fig.add_hline(y=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text="Y Upper", annotation_position="top left")
     if y_lower_limit is not None:
-        fig.add_hline(y=y_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'Lower Limit = {y_lower_limit}')
-    
-    if x_col != "None" and not pd.api.types.is_datetime64_any_dtype(df[x_col]):
-        if x_upper_limit is not None:
-            fig.add_vline(x=x_upper_limit, line=dict(color="red", dash="dash"), annotation_text=f'X Upper Limit = {x_upper_limit}')
-        if x_lower_limit is not None:
-            fig.add_vline(x=x_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'X Lower Limit = {x_lower_limit}')
+        fig.add_hline(y=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text="Y Lower", annotation_position="bottom left")
 
     return fig
 
 # Function to create histogram based on Y-axis data and filter color grouping
 def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2):
-    # Histogram plot
     if filter_col_1 != "None" and filter_col_2 != "None":
-        fig = px.histogram(df, x=y_col, color=[df[filter_col_1], df[filter_col_2]], nbins=20, histnorm='probability', opacity=0.75)
+        df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
+        color_col = "__ColorGroup__"
     elif filter_col_1 != "None":
-        fig = px.histogram(df, x=y_col, color=filter_col_1, nbins=20, histnorm='probability', opacity=0.75)
+        color_col = filter_col_1
     elif filter_col_2 != "None":
-        fig = px.histogram(df, x=y_col, color=filter_col_2, nbins=20, histnorm='probability', opacity=0.75)
+        color_col = filter_col_2
     else:
-        fig = go.Figure()
-        fig.add_trace(go.Histogram(
-            x=df[y_col],
-            nbinsx=20,  # You can adjust the number of bins here
-            histnorm='probability',
-            name=f'{y_col} Distribution',
-            opacity=0.75
-        ))
+        color_col = None
 
-    # Only apply Y-axis limits if they are set (not None)
-    if y_min is not None and y_max is not None:
-        fig.update_layout(
-            title=f'{y_col} Histogram',
-            xaxis_title=y_col,
-            yaxis_title='Probability Density',
-            bargap=0.2,
-            xaxis=dict(range=[y_min, y_max])  # Matching the Y-axis range of scatter plot
-        )
-        
-        # Add limit lines if defined
-        if y_upper_limit is not None:
-            fig.add_vline(x=y_upper_limit, line=dict(color="red", dash="dash"), annotation_text=f'Upper Limit = {y_upper_limit}')
-        if y_lower_limit is not None:
-            fig.add_vline(x=y_lower_limit, line=dict(color="black", dash="dash"), annotation_text=f'Lower Limit = {y_lower_limit}')
+    # Create histogram
+    fig = px.histogram(
+        df,
+        x=y_col,
+        color=color_col,
+        barmode="overlay",
+        histnorm="percent",
+        nbins=50,
+        height=400
+    )
 
-    # Fit a normal distribution to the data and add a fit line for each filter group
-    if filter_col_1 != "None" or filter_col_2 != "None":
-        if filter_col_1 != "None":
-            groups = df[filter_col_1].dropna().unique()
-        elif filter_col_2 != "None":
-            groups = df[filter_col_2].dropna().unique()
-        for group in groups:
-            group_data = df[df[filter_col_1] == group] if filter_col_1 != "None" else df[df[filter_col_2] == group]
-            mu, std = norm.fit(group_data[y_col].dropna())
-            xmin, xmax = group_data[y_col].min(), group_data[y_col].max()
-            x = np.linspace(xmin, xmax, 100)
-            p = norm.pdf(x, mu, std)
-            fig.add_trace(go.Scatter(
-                x=x, y=p, mode='lines', name=f'{group} Fit Line', line=dict(width=2)
-            ))
-    else:
-        mu, std = norm.fit(df[y_col].dropna())
-        xmin, xmax = df[y_col].min(), df[y_col].max()
-        x = np.linspace(xmin, xmax, 100)
-        p = norm.pdf(x, mu, std)
-        fig.add_trace(go.Scatter(
-            x=x, y=p, mode='lines', name='Fit Line', line=dict(color='orange', width=2)
-        ))
+    # Update layout for axis labels
+    fig.update_layout(xaxis_title=y_col, yaxis_title="Percent")
+    fig.update_layout(
+        xaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None)
+    )
+
+    # Add vertical lines for upper and lower limits
+    if y_upper_limit is not None:
+        fig.add_vline(x=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text="Y Upper", annotation_position="top right")
+    if y_lower_limit is not None:
+        fig.add_vline(x=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text="Y Lower", annotation_position="bottom right")
+
+    # Add fit line (Normal Distribution Fit) for each group
+    if color_col:
+        for group in df[color_col].dropna().unique():
+            group_data = df[df[color_col] == group][y_col].dropna()
+            
+            if len(group_data) > 0:
+                # Fit data to a normal distribution
+                mu, std = stats.norm.fit(group_data)
+                
+                # Generate the fitted line (probability density function)
+                x_fit = np.linspace(y_min, y_max, 100)
+                y_fit = stats.norm.pdf(x_fit, mu, std)
+                
+                # Add the fit line to the plot for this group
+                fig.add_trace(go.Scatter(
+                    x=x_fit, 
+                    y=y_fit * np.max(np.histogram(group_data, bins=50)[0]) * (y_max - y_min) / 50,  # Scaling to match histogram height
+                    mode='lines', 
+                    name=f"Fit Line ({group})",
+                    line=dict(width=2)
+                ))
 
     return fig
 
@@ -178,7 +190,7 @@ def main():
 
             # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
-            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col_1)
+            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2)
             st.plotly_chart(fig)
 
             # User option to display histogram

@@ -34,11 +34,19 @@ def calculate_cpk(mean, std, upper_limit, lower_limit):
     return None
 
 # Function to create scatter plot
+import numpy as np
+import plotly.graph_objs as go
+
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
+
+#绘制散点图
 def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
                         x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit,
-                        filter_col_1, filter_col_2):
+                        filter_col_1, filter_col_2, add_trendline=False):
 
-    # 创建组合颜色列（如有）
+    # 创建组合颜色列
     if filter_col_1 != "None" and filter_col_2 != "None":
         df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
         color_col = "__ColorGroup__"
@@ -49,23 +57,86 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
     else:
         color_col = None
 
-    fig = px.scatter(
-        df,
-        x=x_col if x_col != "None" else df.index,
-        y=y_col,
-        color=color_col,
-        title=title,
-        height=500
-    )
+    # 配置颜色序列
+    color_seq = px.colors.qualitative.Plotly
 
-    fig.update_layout(title=title, xaxis_title=x_col, yaxis_title=y_col)
+    # 初始图像（先用 express 画出原始点图）
+    if color_col is None:
+        fig = px.scatter(
+            df,
+            x=x_col if x_col != "None" else df.index,
+            y=y_col,
+            title=title,
+            height=500
+        )
+        fig.update_traces(marker=dict(color='blue', size=6))
+    else:
+        fig = px.scatter(
+            df,
+            x=x_col if x_col != "None" else df.index,
+            y=y_col,
+            color=color_col,
+            color_discrete_sequence=color_seq,
+            title=title,
+            height=500
+        )
+    
+    # 添加趋势线逻辑（忽略 X 值，按 index 拟合）
+    if add_trendline and color_col is not None:
+        unique_groups = df[color_col].unique()
+        color_map = {group: color_seq[i % len(color_seq)] for i, group in enumerate(unique_groups)}
+
+        for group in unique_groups:
+            group_data = df[df[color_col] == group]
+            y_vals = group_data[y_col].dropna().values
+            if len(y_vals) >= 2:
+                x_idx = np.arange(len(y_vals))
+                coeffs = np.polyfit(x_idx, y_vals, deg=1)
+                trend_y = np.polyval(coeffs, x_idx)
+
+                x_vals = group_data[x_col].values[:len(trend_y)] if x_col != "None" else group_data.index[:len(trend_y)]
+
+                fig.add_trace(go.Scatter(
+                    x=x_vals,
+                    y=trend_y,
+                    mode='lines',
+                    name=f"Trendline ({group})",
+                    line=dict(dash='dash', color=color_map[group])
+                ))
+
+    elif add_trendline and color_col is None:
+        y_vals = df[y_col].dropna().values
+        if len(y_vals) >= 2:
+            x_idx = np.arange(len(y_vals))
+            coeffs = np.polyfit(x_idx, y_vals, deg=1)
+            trend_y = np.polyval(coeffs, x_idx)
+            x_vals = df[x_col].values[:len(trend_y)] if x_col != "None" else df.index[:len(trend_y)]
+
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=trend_y,
+                mode='lines',
+                name="Trendline",
+                line=dict(dash='dash', color='black')
+            ))
+
+    # 图表配置
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_col,
+        yaxis_title=y_col,
+        margin=dict(l=40, r=40, t=60, b=40),
+        legend_title=color_col if color_col is not None else None
+    )
     fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))
 
-    fig.update_layout(
-        xaxis=dict(range=[x_min, x_max] if x_min is not None and x_max is not None else None),
-        yaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None)
-    )
+    # 坐标轴范围限制
+    if x_min is not None and x_max is not None:
+        fig.update_layout(xaxis=dict(range=[x_min, x_max]))
+    if y_min is not None and y_max is not None:
+        fig.update_layout(yaxis=dict(range=[y_min, y_max]))
 
+    # 极限线
     if x_upper_limit is not None:
         fig.add_vline(x=x_upper_limit, line=dict(color='red', dash='dash'), annotation_text="X Upper", annotation_position="top right")
     if x_lower_limit is not None:
@@ -79,6 +150,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
 
 # Function to create histogram based on Y-axis data and filter color grouping
 def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2):
+    # 创建颜色分组列（如有）
     if filter_col_1 != "None" and filter_col_2 != "None":
         df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
         color_col = "__ColorGroup__"
@@ -89,50 +161,65 @@ def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filt
     else:
         color_col = None
 
-    # Create histogram
-    fig = px.histogram(
-        df,
-        x=y_col,
-        color=color_col,
-        barmode="overlay",
-        histnorm="percent",
-        nbins=50,
-        height=400
-    )
+    # 创建直方图
+    if color_col is None or color_col == "None":
+        fig = px.histogram(
+            df,
+            x=y_col,
+            nbins=50,
+            histnorm="percent",
+            title="📊 Histogram",
+            height=400
+        )
+        fig.update_traces(marker=dict(color='blue'))
+    else:
+        fig = px.histogram(
+            df,
+            x=y_col,
+            color=color_col,
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            barmode="overlay",
+            histnorm="percent",
+            nbins=50,
+            title="📊 Histogram",
+            height=400
+        )
 
-    # Update layout for axis labels
-    fig.update_layout(xaxis_title=y_col, yaxis_title="Percent")
+    # 更新布局
     fig.update_layout(
+        xaxis_title=y_col,
+        yaxis_title="Percent",
         xaxis=dict(range=[y_min, y_max] if y_min is not None and y_max is not None else None)
     )
 
-    # Add vertical lines for upper and lower limits
+    # 添加上下限线
     if y_upper_limit is not None:
         fig.add_vline(x=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text="Y Upper", annotation_position="top right")
     if y_lower_limit is not None:
         fig.add_vline(x=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text="Y Lower", annotation_position="bottom right")
 
-    # Add fit line (Normal Distribution Fit) for each group
-    if color_col:
+    # 添加拟合曲线
+    def add_fit_line(data, label="Fit Line"):
+        data = data.dropna()
+        if len(data) >= 10:
+            mu, std = stats.norm.fit(data)
+            x_fit = np.linspace(y_min, y_max, 100)
+            y_fit = stats.norm.pdf(x_fit, mu, std)
+            y_fit_percent = y_fit / y_fit.sum() * 100
+            fig.add_trace(go.Scatter(
+                x=x_fit,
+                y=y_fit_percent,
+                mode='lines',
+                name=label,
+                line=dict(width=2)
+            ))
+
+    if color_col and color_col != "None":
         for group in df[color_col].dropna().unique():
-            group_data = df[df[color_col] == group][y_col].dropna()
-            
-            if len(group_data) > 0:
-                # Fit data to a normal distribution
-                mu, std = stats.norm.fit(group_data)
-                
-                # Generate the fitted line (probability density function)
-                x_fit = np.linspace(y_min, y_max, 100)
-                y_fit = stats.norm.pdf(x_fit, mu, std)
-                
-                # Add the fit line to the plot for this group
-                fig.add_trace(go.Scatter(
-                    x=x_fit, 
-                    y=y_fit * np.max(np.histogram(group_data, bins=50)[0]) * (y_max - y_min) / 50,  # Scaling to match histogram height
-                    mode='lines', 
-                    name=f"Fit Line ({group})",
-                    line=dict(width=2)
-                ))
+            group_data = df[df[color_col] == group][y_col]
+            add_fit_line(group_data, label=f"Fit Line ({group})")
+    else:
+        add_fit_line(df[y_col])
 
     return fig
 
@@ -188,10 +275,12 @@ def main():
                 y_upper_limit = st.number_input("🚀 Y Upper Limit", value=None)
                 y_lower_limit = st.number_input("📏 Y Lower Limit", value=None)
 
+            add_trendline = st.checkbox("📈 Add Trendline", value=False)
+            
             # Generate scatter plot
             title = f"{x_col if x_col != 'None' else 'Index'} VS {y_col}"
-            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2)
-            st.plotly_chart(fig)
+            fig = create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max, x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2, add_trendline=add_trendline)
+            st.plotly_chart(fig, use_container_width=True)
 
             # User option to display histogram
             show_histogram = st.checkbox("Show Histogram", value=False)
@@ -202,41 +291,65 @@ def main():
                 st.plotly_chart(hist_fig)
 
             # Compute statistics for each group if filter columns are selected
+            # 先计算整体统计数据
+            overall_sample_size = df[y_col].dropna().count()
+            overall_mean = df[y_col].mean()
+            overall_std = df[y_col].std()
+            overall_cpk = calculate_cpk(overall_mean, overall_std, y_upper_limit, y_lower_limit)
+
+            # 初始化一个列表用于存储所有统计信息
             stats_data = []
-            if filter_col_1 != "None" or filter_col_2 != "None":
-                group_filter = filter_col_1 if filter_col_1 != "None" else filter_col_2
+
+            # 显示 Overall 统计信息
+            stats_data.append({
+                "Group": "Overall",
+                "Sample Size": overall_sample_size,
+                "Mean": round(overall_mean, 4),
+                "Std Dev": round(overall_std, 4),
+                "CPK": round(overall_cpk, 4) if overall_cpk is not None else None
+            })
+
+            # 如果有选择筛选列
+            if filter_col_1 != "None" and filter_col_2 != "None":
+                group_filter_1 = filter_col_1
+                group_filter_2 = filter_col_2
+                # 计算多层筛选后的统计
+                for group_1 in df[group_filter_1].dropna().unique():
+                    for group_2 in df[df[group_filter_1] == group_1][group_filter_2].dropna().unique():
+                        group_data = df[(df[group_filter_1] == group_1) & (df[group_filter_2] == group_2)]
+                        sample_size = group_data[y_col].dropna().count()
+                        mean_value = group_data[y_col].mean()
+                        std_value = group_data[y_col].std()
+                        cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
+                        stats_data.append({
+                            "Group": f"{group_1} - {group_2}",
+                            "Sample Size": sample_size,
+                            "Mean": round(mean_value, 4),
+                            "Std Dev": round(std_value, 4),
+                            "CPK": round(cpk, 4) if cpk is not None else None
+                        })
+
+            elif filter_col_1 != "None":  # 如果只有一个筛选条件
+                group_filter = filter_col_1
                 for group in df[group_filter].dropna().unique():
                     group_data = df[df[group_filter] == group]
                     sample_size = group_data[y_col].dropna().count()
                     mean_value = group_data[y_col].mean()
                     std_value = group_data[y_col].std()
                     cpk = calculate_cpk(mean_value, std_value, y_upper_limit, y_lower_limit)
-                    stats_data.append([group, sample_size, f"{mean_value:.4f}", f"{std_value:.4f}", f"{cpk:.2f}" if cpk is not None else "N/A"])
+                    stats_data.append({
+                        "Group": group,
+                        "Sample Size": sample_size,
+                        "Mean": round(mean_value, 4),
+                        "Std Dev": round(std_value, 4),
+                        "CPK": round(cpk, 4) if cpk is not None else None
+                    })
 
-            # Overall statistics
-            overall_sample_size = df[y_col].dropna().count()
-            overall_mean = df[y_col].mean()
-            overall_std = df[y_col].std()
-            overall_cpk = calculate_cpk(overall_mean, overall_std, y_upper_limit, y_lower_limit)
-
-            # Add overall stats to the table
-            stats_data.insert(0, ['Overall', overall_sample_size, f"{overall_mean:.4f}", f"{overall_std:.4f}", f"{overall_cpk:.2f}" if overall_cpk is not None else "N/A"])
-
-            # Display statistics
-            #st.markdown("### 📊 Selected Data Statistics")
-            #stats_df = pd.DataFrame(stats_data, columns=[group_filter if filter_col_1 != "None" or filter_col_2 != "None" else "Group", "Sample Size", "Mean", "Std Dev", "CPK"])
-            #st.dataframe(stats_df)
-
-            # 创建 DataFrame，并去除空行
-            stats_df = pd.DataFrame(stats_data, columns=["Group", "Sample Size", "Mean", "Std Dev", "CPK"])
-            stats_df = stats_df.dropna(how="all").reset_index(drop=True)  # 移除完全为空的行
-
-            # Streamlit 显示交互式表格
-            st.subheader("📊 Statistics by Group")
-            if not stats_df.empty:
-                st.dataframe(stats_df, use_container_width=True)  # 交互式表格
-            else:
-                st.write("No statistics available for the selected filters.")
+            # 显示统计数据表格
+            if stats_data:
+                st.markdown("### 📊 Selected Data Statistics")
+                df_stats = pd.DataFrame(stats_data)
+                st.dataframe(df_stats, width=1000)  # 设置更宽的表格
 
         except Exception as e:
             st.error(f"🚨 Error processing file: {e}")

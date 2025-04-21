@@ -59,7 +59,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
             x=x_col if x_col != "None" else df.index,
             y=y_col,
             title=title,
-            height=500
+            height=400
         )
         fig.update_traces(marker=dict(color='blue', size=6))
     else:
@@ -70,7 +70,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
             color=color_col,
             color_discrete_sequence=color_seq,
             title=title,
-            height=500
+            height=400
         )
     
     # 添加趋势线逻辑（忽略 X 值，按 index 拟合）
@@ -117,7 +117,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
         title=title,
         xaxis_title=x_col,
         yaxis_title=y_col,
-        margin=dict(l=40, r=40, t=60, b=40),
+        #margin=dict(l=40, r=40, t=60, b=40),
         legend_title=color_col if color_col is not None else None
     )
     fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))

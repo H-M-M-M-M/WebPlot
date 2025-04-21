@@ -33,14 +33,6 @@ def calculate_cpk(mean, std, upper_limit, lower_limit):
         return min((upper_limit - mean) / (3 * std), (mean - lower_limit) / (3 * std))
     return None
 
-# Function to create scatter plot
-import numpy as np
-import plotly.graph_objs as go
-
-import plotly.express as px
-import plotly.graph_objects as go
-import numpy as np
-
 #绘制散点图
 def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
                         x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit,

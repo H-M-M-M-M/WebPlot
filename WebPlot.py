@@ -37,8 +37,12 @@ def calculate_cpk(mean, std, upper_limit, lower_limit):
 def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
                         x_upper_limit, x_lower_limit, y_upper_limit, y_lower_limit,
                         filter_col_1, filter_col_2, add_trendline=False):
+    if y_col not in df.columns:
+        raise ValueError(f"❌ Y轴字段 `{y_col}` 不存在于数据中！")
+    if x_col != "None" and x_col not in df.columns:
+        raise ValueError(f"❌ X轴字段 `{x_col}` 不存在于数据中！")
 
-    # 创建组合颜色列
+    # 颜色分组列处理
     if filter_col_1 != "None" and filter_col_2 != "None":
         df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
         color_col = "__ColorGroup__"
@@ -49,80 +53,90 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
     else:
         color_col = None
 
-    # 配置颜色序列
     color_seq = px.colors.qualitative.Plotly
 
-    # 初始图像（先用 express 画出原始点图）
+    # X 轴处理
+    if x_col == "None":
+        df["__Index__"] = df.index
+        x_plot = "__Index__"
+        x_numeric_col = "__Index__"
+    else:
+        if pd.api.types.is_datetime64_any_dtype(df[x_col]):
+            df["__XNumeric__"] = df[x_col].astype(np.int64) / 1e9  # 秒数
+            x_plot = x_col
+            x_numeric_col = "__XNumeric__"
+        else:
+            try:
+                df["__XNumeric__"] = pd.to_numeric(df[x_col], errors="coerce")
+                if df["__XNumeric__"].isnull().any():
+                    raise ValueError
+                x_plot = x_col
+                x_numeric_col = "__XNumeric__"
+            except:
+                df["__XNumeric__"] = range(len(df))
+                x_plot = x_col
+                x_numeric_col = "__XNumeric__"
+
+    # 散点图绘制
     if color_col is None:
-        fig = px.scatter(
-            df,
-            x=x_col if x_col != "None" else df.index,
-            y=y_col,
-            title=title,
-            height=400
-        )
+        fig = px.scatter(df, x=x_plot, y=y_col, title=title, height=500)
         fig.update_traces(marker=dict(color='blue', size=6))
     else:
         fig = px.scatter(
-            df,
-            x=x_col if x_col != "None" else df.index,
-            y=y_col,
-            color=color_col,
+            df, x=x_plot, y=y_col, color=color_col,
             color_discrete_sequence=color_seq,
-            title=title,
-            height=400
+            title=title, height=400
         )
-    
-    # 添加趋势线逻辑（忽略 X 值，按 index 拟合）
-    if add_trendline and color_col is not None:
-        unique_groups = df[color_col].unique()
-        color_map = {group: color_seq[i % len(color_seq)] for i, group in enumerate(unique_groups)}
 
-        for group in unique_groups:
-            group_data = df[df[color_col] == group]
-            y_vals = group_data[y_col].dropna().values
-            if len(y_vals) >= 2:
-                x_idx = np.arange(len(y_vals))
-                coeffs = np.polyfit(x_idx, y_vals, deg=1)
-                trend_y = np.polyval(coeffs, x_idx)
+    # 添加趋势线（X vs Y 拟合）
+    if add_trendline:
+        if color_col is not None:
+            unique_groups = df[color_col].unique()
+            color_map = {group: color_seq[i % len(color_seq)] for i, group in enumerate(unique_groups)}
 
-                x_vals = group_data[x_col].values[:len(trend_y)] if x_col != "None" else group_data.index[:len(trend_y)]
+            for group in unique_groups:
+                group_data = df[df[color_col] == group]
+                group_data = group_data[[x_col, x_numeric_col, y_col]].dropna()
+
+                if len(group_data) >= 2:
+                    x_vals = group_data[x_numeric_col].values
+                    y_vals = group_data[y_col].values
+                    coeffs = np.polyfit(x_vals, y_vals, deg=1)
+                    trend_y = np.polyval(coeffs, x_vals)
+
+                    fig.add_trace(go.Scatter(
+                        x=group_data[x_col],
+                        y=trend_y,
+                        mode='lines',
+                        name=f"Trendline ({group})",
+                        line=dict(dash='dash', color=color_map[group])
+                    ))
+        else:
+            df_valid = df[[x_col, x_numeric_col, y_col]].dropna()
+            if len(df_valid) >= 2:
+                x_vals = df_valid[x_numeric_col].values
+                y_vals = df_valid[y_col].values
+                coeffs = np.polyfit(x_vals, y_vals, deg=1)
+                trend_y = np.polyval(coeffs, x_vals)
 
                 fig.add_trace(go.Scatter(
-                    x=x_vals,
+                    x=df_valid[x_col],
                     y=trend_y,
                     mode='lines',
-                    name=f"Trendline ({group})",
-                    line=dict(dash='dash', color=color_map[group])
+                    name="Trendline",
+                    line=dict(dash='dash', color='black')
                 ))
 
-    elif add_trendline and color_col is None:
-        y_vals = df[y_col].dropna().values
-        if len(y_vals) >= 2:
-            x_idx = np.arange(len(y_vals))
-            coeffs = np.polyfit(x_idx, y_vals, deg=1)
-            trend_y = np.polyval(coeffs, x_idx)
-            x_vals = df[x_col].values[:len(trend_y)] if x_col != "None" else df.index[:len(trend_y)]
-
-            fig.add_trace(go.Scatter(
-                x=x_vals,
-                y=trend_y,
-                mode='lines',
-                name="Trendline",
-                line=dict(dash='dash', color='black')
-            ))
-
-    # 图表配置
+    # 坐标轴和范围
     fig.update_layout(
         title=title,
-        xaxis_title=x_col,
+        xaxis_title=x_col if x_col != "None" else "Index",
         yaxis_title=y_col,
         #margin=dict(l=40, r=40, t=60, b=40),
         legend_title=color_col if color_col is not None else None
     )
     fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))
 
-    # 坐标轴范围限制
     if x_min is not None and x_max is not None:
         fig.update_layout(xaxis=dict(range=[x_min, x_max]))
     if y_min is not None and y_max is not None:
@@ -130,13 +144,17 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
 
     # 极限线
     if x_upper_limit is not None:
-        fig.add_vline(x=x_upper_limit, line=dict(color='red', dash='dash'), annotation_text="X Upper", annotation_position="top right")
+        fig.add_vline(x=x_upper_limit, line=dict(color='red', dash='dash'),
+                      annotation_text="X Upper", annotation_position="top right")
     if x_lower_limit is not None:
-        fig.add_vline(x=x_lower_limit, line=dict(color='green', dash='dash'), annotation_text="X Lower", annotation_position="bottom right")
+        fig.add_vline(x=x_lower_limit, line=dict(color='green', dash='dash'),
+                      annotation_text="X Lower", annotation_position="bottom right")
     if y_upper_limit is not None:
-        fig.add_hline(y=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text="Y Upper", annotation_position="top left")
+        fig.add_hline(y=y_upper_limit, line=dict(color='red', dash='dash'),
+                      annotation_text="Y Upper", annotation_position="top left")
     if y_lower_limit is not None:
-        fig.add_hline(y=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text="Y Lower", annotation_position="bottom left")
+        fig.add_hline(y=y_lower_limit, line=dict(color='green', dash='dash'),
+                      annotation_text="Y Lower", annotation_position="bottom left")
 
     return fig
 

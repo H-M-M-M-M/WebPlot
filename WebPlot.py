@@ -42,7 +42,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
     if x_col != "None" and x_col not in df.columns:
         raise ValueError(f"❌ X轴字段 `{x_col}` 不存在于数据中！")
 
-    # 颜色分组列处理
+    # 分组用颜色列
     if filter_col_1 != "None" and filter_col_2 != "None":
         df["__ColorGroup__"] = df[filter_col_1].astype(str) + " | " + df[filter_col_2].astype(str)
         color_col = "__ColorGroup__"
@@ -55,21 +55,19 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
 
     color_seq = px.colors.qualitative.Plotly
 
-    # X 轴处理
+    # X轴处理逻辑
     if x_col == "None":
         df["__Index__"] = df.index
         x_plot = "__Index__"
         x_numeric_col = "__Index__"
     else:
         if pd.api.types.is_datetime64_any_dtype(df[x_col]):
-            df["__XNumeric__"] = df[x_col].astype(np.int64) / 1e9  # 秒数
+            df["__XNumeric__"] = df[x_col].astype(np.int64) / 1e9
             x_plot = x_col
             x_numeric_col = "__XNumeric__"
         else:
             try:
                 df["__XNumeric__"] = pd.to_numeric(df[x_col], errors="coerce")
-                if df["__XNumeric__"].isnull().any():
-                    raise ValueError
                 x_plot = x_col
                 x_numeric_col = "__XNumeric__"
             except:
@@ -77,7 +75,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
                 x_plot = x_col
                 x_numeric_col = "__XNumeric__"
 
-    # 散点图绘制
+    # 绘图
     if color_col is None:
         fig = px.scatter(df, x=x_plot, y=y_col, title=title, height=500)
         fig.update_traces(marker=dict(color='blue', size=6))
@@ -88,7 +86,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
             title=title, height=400
         )
 
-    # 添加趋势线（X vs Y 拟合）
+    # 趋势线处理
     if add_trendline:
         if color_col is not None:
             unique_groups = df[color_col].unique()
@@ -96,47 +94,48 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
 
             for group in unique_groups:
                 group_data = df[df[color_col] == group]
-                group_data = group_data[[x_col, x_numeric_col, y_col]].dropna()
-
+                group_data = group_data.dropna(subset=[x_numeric_col, y_col])
                 if len(group_data) >= 2:
-                    x_vals = group_data[x_numeric_col].values
-                    y_vals = group_data[y_col].values
+                    x_vals = group_data[x_numeric_col].to_numpy().flatten()
+                    y_vals = group_data[y_col].to_numpy().flatten()
+
+                    if len(x_vals) == len(y_vals):
+                        coeffs = np.polyfit(x_vals, y_vals, deg=1)
+                        trend_y = np.polyval(coeffs, x_vals)
+                        fig.add_trace(go.Scatter(
+                            x=group_data[x_plot],
+                            y=trend_y,
+                            mode='lines',
+                            name=f"Trendline ({group})",
+                            line=dict(dash='dash', color=color_map[group])
+                        ))
+        else:
+            df_valid = df.dropna(subset=[x_numeric_col, y_col])
+            if len(df_valid) >= 2:
+                x_vals = df_valid[x_numeric_col].to_numpy().flatten()
+                y_vals = df_valid[y_col].to_numpy().flatten()
+
+                if len(x_vals) == len(y_vals):
                     coeffs = np.polyfit(x_vals, y_vals, deg=1)
                     trend_y = np.polyval(coeffs, x_vals)
-
                     fig.add_trace(go.Scatter(
-                        x=group_data[x_col],
+                        x=df_valid[x_plot],
                         y=trend_y,
                         mode='lines',
-                        name=f"Trendline ({group})",
-                        line=dict(dash='dash', color=color_map[group])
+                        name="Trendline",
+                        line=dict(dash='dash', color='black')
                     ))
-        else:
-            df_valid = df[[x_col, x_numeric_col, y_col]].dropna()
-            if len(df_valid) >= 2:
-                x_vals = df_valid[x_numeric_col].values
-                y_vals = df_valid[y_col].values
-                coeffs = np.polyfit(x_vals, y_vals, deg=1)
-                trend_y = np.polyval(coeffs, x_vals)
 
-                fig.add_trace(go.Scatter(
-                    x=df_valid[x_col],
-                    y=trend_y,
-                    mode='lines',
-                    name="Trendline",
-                    line=dict(dash='dash', color='black')
-                ))
-
-    # 坐标轴和范围
+    # 设置坐标轴
     fig.update_layout(
         title=title,
         xaxis_title=x_col if x_col != "None" else "Index",
         yaxis_title=y_col,
-        #margin=dict(l=40, r=40, t=60, b=40),
-        legend_title=color_col if color_col is not None else None
+        legend_title=color_col if color_col else None
     )
     fig.update_traces(marker=dict(size=6), selector=dict(mode='markers'))
 
+    # 坐标轴范围
     if x_min is not None and x_max is not None:
         fig.update_layout(xaxis=dict(range=[x_min, x_max]))
     if y_min is not None and y_max is not None:
@@ -157,6 +156,7 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
                       annotation_text="Y Lower", annotation_position="bottom left")
 
     return fig
+
 
 # Function to create histogram based on Y-axis data and filter color grouping
 def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filter_col_1, filter_col_2):

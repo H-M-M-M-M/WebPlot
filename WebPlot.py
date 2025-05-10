@@ -144,16 +144,16 @@ def create_scatter_plot(df, x_col, y_col, title, x_min, x_max, y_min, y_max,
     # 极限线
     if x_upper_limit is not None:
         fig.add_vline(x=x_upper_limit, line=dict(color='red', dash='dash'),
-                      annotation_text="X Upper", annotation_position="top right")
+                      annotation_text=f"X Upper= {x_upper_limit}", annotation_position="top right")
     if x_lower_limit is not None:
         fig.add_vline(x=x_lower_limit, line=dict(color='green', dash='dash'),
-                      annotation_text="X Lower", annotation_position="bottom right")
+                      annotation_text=f"X Lower= {x_lower_limit}", annotation_position="bottom right")
     if y_upper_limit is not None:
         fig.add_hline(y=y_upper_limit, line=dict(color='red', dash='dash'),
-                      annotation_text="Y Upper", annotation_position="top left")
+                      annotation_text=f"Y Upper= {y_upper_limit}", annotation_position="top left")
     if y_lower_limit is not None:
         fig.add_hline(y=y_lower_limit, line=dict(color='green', dash='dash'),
-                      annotation_text="Y Lower", annotation_position="bottom left")
+                      annotation_text=f"Y Lower= {y_lower_limit}", annotation_position="bottom left")
 
     return fig
 
@@ -204,9 +204,9 @@ def create_histogram(df, y_col, y_min, y_max, y_upper_limit, y_lower_limit, filt
 
     # 添加上下限线
     if y_upper_limit is not None:
-        fig.add_vline(x=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text="Y Upper", annotation_position="top right")
+        fig.add_vline(x=y_upper_limit, line=dict(color='red', dash='dash'), annotation_text=f"Y Lower= {y_lower_limit}", annotation_position="top right")
     if y_lower_limit is not None:
-        fig.add_vline(x=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text="Y Lower", annotation_position="bottom right")
+        fig.add_vline(x=y_lower_limit, line=dict(color='green', dash='dash'), annotation_text=f"Y Lower= {y_lower_limit}", annotation_position="bottom right")
 
     # 添加拟合曲线
     def add_fit_line(data, label="Fit Line"):

@@ -316,7 +316,7 @@ def main():
                 "Sample Size": overall_sample_size,
                 "Mean": round(overall_mean, 4),
                 "Std Dev": round(overall_std, 4),
-               # "CPK": round(overall_cpk, 4) if overall_cpk is not None else None
+                "CPK": round(overall_cpk, 4) if overall_cpk is not None else None
             })
 
             # 如果有选择筛选列
